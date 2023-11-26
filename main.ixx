@@ -53,8 +53,8 @@ static const std::unordered_map<SDL_Keycode, octet> SDL_CLES
 //------------------------------------------------------------
 struct SDLEnv
 {
-	SDL_Window* window{};
-	SDL_Renderer* renderer{};
+	SDL_Window* window{ nullptr };
+	SDL_Renderer* renderer{ nullptr };
 	bool ok() const { return window != nullptr && renderer != nullptr; }
 };
 
@@ -107,56 +107,62 @@ void render(SDL_Renderer& renderer, IVideoBuffer& video)
 	SDL_RenderPresent(&renderer);
 }
 
+bool maj(IProcesseur& processeur)
+{
+	SDL_Event event;
+	if (SDL_PollEvent(&event))
+	{
+		if (event.type == SDL_QUIT)
+		{
+			return false;
+		}
+		else if (event.type == SDL_KEYDOWN)
+		{
+			if (event.key.keysym.sym == SDLK_ESCAPE)
+			{
+				return false;
+			}
+			else
+			{
+				const auto itCle{ SDL_CLES.find(event.key.keysym.sym) };
+				if (itCle != SDL_CLES.end())
+				{
+					processeur.appuyerToucheClavier(itCle->second);
+				}
+			}
+		}
+		else if (event.type == SDL_KEYUP)
+		{
+			const auto itCle{ SDL_CLES.find(event.key.keysym.sym) };
+			if (itCle != SDL_CLES.end())
+			{
+				processeur.relacherToucheClavier(itCle->second);
+			}
+		}
+	}
+
+	return true;
+}
+
 //------------------------------------------------------------
 void go(SDLEnv& env, IProcesseur & processeur, IVideoBuffer& video)
 {
 	assert(env.ok());
 
-	const float frequenceMAJhz{ 120.0f };
-	const float tempsMAJms{ 1000.0f / frequenceMAJhz };
+	const float majFrequenceHz{ 60.0f };
+	const float majTempsMs{ 1000.0f / majFrequenceHz };
 	auto dernierTick{ std::chrono::high_resolution_clock::now() };
 
-	while (true)
+	while (env.ok() && maj(processeur))
 	{
 		const auto maintenant{ std::chrono::high_resolution_clock::now() };
 		const float delta{ std::chrono::duration<float, std::chrono::milliseconds::period>(maintenant - dernierTick).count() };
-		if( delta < tempsMAJms)	// 60 Hz
+		if( delta < majTempsMs )
 			continue;
-
-		SDL_Event event;
-		if (SDL_PollEvent(&event))
-		{
-			if (event.type == SDL_QUIT)
-			{
-				break;
-			}
-			else if (event.type == SDL_KEYDOWN)
-			{
-				if (event.key.keysym.sym == SDLK_ESCAPE)
-				{
-					break;
-				}
-				else
-				{
-					const auto itCle{ SDL_CLES.find(event.key.keysym.sym) };
-					if (itCle != SDL_CLES.end())
-					{
-						processeur.appuyerToucheClavier(itCle->second);
-					}
-				}
-			}
-			else if (event.type == SDL_KEYUP)
-			{
-				const auto itCle{ SDL_CLES.find(event.key.keysym.sym) };
-				if (itCle != SDL_CLES.end())
-				{
-					processeur.relacherToucheClavier(itCle->second);
-				}
-			}
-		}
 
 		processeur.tick();
 		render(*(env.renderer), video);
+
 		dernierTick = maintenant;
 	}
 }
